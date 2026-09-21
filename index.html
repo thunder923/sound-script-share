@@ -12,6 +12,9 @@
     <script src="https://unpkg.com/react-dom@17/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
     
+    <!-- Google AdSense スクリプト -->
+    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-6281950220310365" crossorigin="anonymous"></script>
+
     <style>
         body { background-color: #121212; color: #e0e0e0; font-family: sans-serif; }
         input, textarea { background-color: #2d2d2d; color: #ffffff; border: 1px solid #444; padding: 8px; border-radius: 4px; width: 100%; }
@@ -41,13 +44,14 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
+            overflow: hidden;
         }
     </style>
 </head>
 <body>
     <div id="root"></div>
     <script type="text/babel">
-        const { useState } = React;
+        const { useState, useEffect } = React;
 
         const GAS_CODE_STRING = `function doPost(e) {
   try {
@@ -159,6 +163,17 @@ function doGet(e) {
             const [folderInput, setFolderInput] = useState(localStorage.getItem('targetFolderIdShare') || "");
             const [folderNameInput, setFolderNameInput] = useState(localStorage.getItem('targetFolderNameShare') || "");
             const [gasUrlInput, setGasUrlInput] = useState(localStorage.getItem('gasUrlShare') || "");
+
+            // AdSense 広告の自動初期化
+            useEffect(() => {
+                try {
+                    if (window.adsbygoogle) {
+                        (window.adsbygoogle = window.adsbygoogle || []).push({});
+                    }
+                } catch (e) {
+                    console.error("AdSense Error:", e);
+                }
+            }, [currentTab]);
 
             const handleFolderInputChange = (e) => {
                 const input = e.target.value;
@@ -492,11 +507,14 @@ function doGet(e) {
                                     {editingIndex !== null ? '修正を反映する' : 'テイクを記録（アプリ内に保存）'}
                                 </div>
 
+                                {/* AdSense 広告表示領域 */}
                                 <div className="banner-ad-container">
                                     <span className="text-[9px] text-gray-500 mb-0.5">スポンサーリンク</span>
-                                    <div style={{color: '#666', fontSize: '11px'}}>
-                                        [ バナー広告エリア ]
-                                    </div>
+                                    <ins className="adsbygoogle"
+                                         style={{display: 'block', width: '100%'}}
+                                         data-ad-client="ca-pub-6281950220310365"
+                                         data-ad-format="auto"
+                                         data-full-width-responsive="true"></ins>
                                 </div>
                             </div>
 
