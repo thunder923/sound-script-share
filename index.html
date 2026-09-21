@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>録音部 スクリプト管理 (共有版)</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎙️</text></svg>">
+    <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎙️</text></svg>">
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@17/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@17/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+    
+    <style>
+        body { background-color: #121212; color: #e0e0e0; font-family: sans-serif; }
+        input, textarea { background-color: #2d2d2d; color: #ffffff; border: 1px solid #444; padding: 8px; border-radius: 4px; width: 100%; }
+        input:focus, textarea:focus { outline: none; border-color: #4CAF50; }
+        .btn { padding: 12px; border-radius: 6px; font-weight: bold; text-align: center; cursor: pointer; }
+        .btn-ok { background-color: #4CAF50; color: white; }
+        .btn-keep { background-color: #FFC107; color: black; }
+        .btn-ng { background-color: #F44336; color: white; }
+        .btn-save { background-color: #2196F3; color: white; font-size: 1.1rem; }
+        .btn-submit { background-color: #9C27B0; color: white; font-size: 1.1rem; margin-top: 10px; }
+        .btn-submitting { background-color: #7b1fa2; color: #ccc; cursor: not-allowed; }
+        .history-item { background-color: #1e1e1e; border-left: 4px solid #444; padding: 10px; margin-bottom: 8px; border-radius: 4px; }
+        .history-ok { border-color: #4CAF50; }
+        .history-keep { border-color: #FFC107; }
+        .history-ng { border-color: #F44336; }
+        .modal { background-color: rgba(0,0,0,0.8); position: fixed; top:0; left:0; width:100%; height:100%; display:flex; justify-content:center; align-items:center; z-index:100; overflow-y: auto; padding: 20px 0; }
+        
+        .banner-ad-container { 
+            background-color: #181818; 
+            border-top: 1px solid #333; 
+            text-align: center; 
+            padding: 8px; 
+            margin-top: 24px; 
+            border-radius: 4px;
+            min-height: 50px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    <script type="text/babel">
+        const { useState } = React;
+
+        const GAS_CODE_STRING = `function doPost(e) {
+  try {
+    var data = JSON.parse(e.postData.contents);
+    var projectName = data.project || "未定_録音スクリプト";
+    var folderId = data.folderId;
+    var records = data.records;
+    
+    if (!records || records.length === 0) return ContentService.createTextOutput(JSON.stringify({"status": "success", "message": "データなし"})).setMimeType(ContentService.MimeType.JSON);
+    if (!folderId) return ContentService.createTextOutput(JSON.stringify({"status": "error", "message": "フォルダID未設定"})).setMimeType(ContentService.MimeType.JSON);
+
+    var folder = DriveApp.getFolderById(folderId);
+    var files = folder.searchFiles("title = '" + projectName + "' and mimeType = 'application/vnd.google-apps.spreadsheet'");
+    var ss = files.hasNext() ? SpreadsheetApp.open(files.next()) : (function(){ var newSs = SpreadsheetApp.create(projectName); DriveApp.getFileById(newSs.getId()).moveTo(folder); return newSs; })();
+    
+    for (var i = 0; i < records.length; i++) {
+      var r = records[i];
+      var dateStr = r.date || "未設定";
+      var sheet = ss.getSheetByName(dateStr);
+      
+      if (!sheet) {
+        sheet = ss.insertSheet(dateStr);
+        sheet.appendRow(["日付", "ロール", "シーン", "カット", "テイク", "ファイルNo", "評価", "備考", "Ch1", "Ch2", "Ch3", "Ch4", "Ch5", "Ch6", "Ch7", "Ch8"]);
+        var defaultSheet = ss.getSheetByName("シート1");
+        if (defaultSheet && ss.getSheets().length > 1) ss.deleteSheet(defaultSheet);
+      }
+      
+      var lastRow = sheet.getLastRow();
+      var targetRow = -1;
+      
+      if (lastRow > 1) {
+        var existingData = sheet.getRange(2, 1, lastRow - 1, 5).getValues();
+        for (var j = 0; j < existingData.length; j++) {
+          var row = existingData[j];
+          if (String(row[0]) === String(r.date) && String(row[1]) === String(r.roll) && String(row[2]) === String(r.scene) && String(row[3]) === String(r.cut) && Number(row[4]) === Number(r.take)) {
+            targetRow = j + 2; break;
+          }
+        }
+      }
+      
+      var rowData = [r.date, r.roll, r.scene, r.cut, r.take, r.fileNo, r.evaluation, r.memo, r.channels[0], r.channels[1], r.channels[2], r.channels[3], r.channels[4], r.channels[5], r.channels[6], r.channels[7]];
+      
+      if (targetRow !== -1) {
+        sheet.getRange(targetRow, 1, 1, rowData.length).setValues([rowData]);
+      } else {
+        sheet.appendRow(rowData);
+        targetRow = sheet.getLastRow();
+      }
+      sheet.getRange(targetRow, 7).setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(['OK', 'KEEP', 'NG']).build());
+    }
+    
+    return ContentService.createTextOutput(JSON.stringify({"status": "success"})).setMimeType(ContentService.MimeType.JSON);
+  } catch(error) {
+    return ContentService.createTextOutput(JSON.stringify({"status": "error", "message": error.message})).setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+function doGet(e) {
+  return ContentService.createTextOutput(JSON.stringify({"status": "active", "message": "GAS is running"})).setMimeType(ContentService.MimeType.JSON);
+}`;
+
+        function App() {
+            const loadState = (key, defaultVal) => {
+                const saved = localStorage.getItem(key);
+                return saved ? JSON.parse(saved) : defaultVal;
+            };
+
+            const today = new Date().toISOString().split('T')[0];
+            const [project, setProject] = useState("");
+            const [projectHistory, setProjectHistory] = useState(loadState('projectHistory', []));
+            
+            const [date, setDate] = useState(today);
+            const [locationName, setLocationName] = useState("");
+            const [locationHistory, setLocationHistory] = useState(loadState('locationHistory', []));
+            
+            const [hashira, setHashira] = useState("");
+            const [hashiraHistory, setHashiraHistory] = useState(loadState('hashiraHistory', []));
+
+            const [roll, setRoll] = useState("R-01");
+            const [scene, setScene] = useState("1");
+            const [sceneHistory, setSceneHistory] = useState(loadState('sceneHistory', []));
+            
+            const [cut, setCut] = useState("");
+            const [cutHistory, setCutHistory] = useState(loadState('cutHistory', ["A", "B", "C"]));
+            
+            const [take, setTake] = useState(1);
+            const [fileNo, setFileNo] = useState("");
+            
+            const [cameraInfo, setCameraInfo] = useState("");
+            const [cameraHistory, setCameraHistory] = useState(loadState('cameraHistory', ["Aカメ", "Bカメ"]));
+            const [camClip, setCamClip] = useState("");
+            
+            const [evaluation, setEvaluation] = useState("OK");
+            const [memo, setMemo] = useState("");
+            const [channels, setChannels] = useState(loadState('channelHistory', ["ガン", "ピン1", "", "", "", "", "", ""]));
+            
+            const [history, setHistory] = useState(loadState('unsentHistoryShare', []));
+            const updateHistoryAndSave = (newHistory) => {
+                setHistory(newHistory);
+                localStorage.setItem('unsentHistoryShare', JSON.stringify(newHistory));
+            };
+
+            const [editingIndex, setEditingIndex] = useState(null);
+            const [isSubmitting, setIsSubmitting] = useState(false);
+
+            const [currentTab, setCurrentTab] = useState("recorder");
+            const [showSettings, setShowSettings] = useState(false);
+            
+            const [folderInput, setFolderInput] = useState(localStorage.getItem('targetFolderIdShare') || "");
+            const [folderNameInput, setFolderNameInput] = useState(localStorage.getItem('targetFolderNameShare') || "");
+            const [gasUrlInput, setGasUrlInput] = useState(localStorage.getItem('gasUrlShare') || "");
+
+            const handleFolderInputChange = (e) => {
+                const input = e.target.value;
+                setFolderInput(input);
+                if (!input.trim()) return;
+                const folderMatch = input.match(/\/folders\/([a-zA-Z0-9_-]+)/);
+                if (folderMatch && folderMatch[1]) { setFolderInput(folderMatch[1]); return; }
+                const queryMatch = input.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+                if (queryMatch && queryMatch[1]) { setFolderInput(queryMatch[1]); return; }
+            };
+
+            const handleChannelChange = (index, value) => {
+                const newChannels = [...channels];
+                newChannels[index] = value;
+                setChannels(newChannels);
+                localStorage.setItem('channelHistory', JSON.stringify(newChannels));
+            };
+
+            const handleProjectChange = (e) => {
+                const newProject = e.target.value;
+                setProject(newProject);
+                if (project !== "" && newProject !== project) {
+                    const resetChannels = ["", "", "", "", "", "", "", ""];
+                    setChannels(resetChannels);
+                    localStorage.setItem('channelHistory', JSON.stringify(resetChannels));
+                }
+            };
+
+            const saveSettings = () => {
+                localStorage.setItem('targetFolderIdShare', folderInput.trim());
+                localStorage.setItem('targetFolderNameShare', folderNameInput.trim());
+                localStorage.setItem('gasUrlShare', gasUrlInput.trim());
+                setShowSettings(false);
+                alert("共有版の設定を保存しました！");
+            };
+
+            const openFlightradar = () => window.open("https://www.flightradar24.com/", "_blank");
+            const openTenki = () => window.open("https://tenki.jp/", "_blank");
+            
+            const copyGasCode = () => {
+                navigator.clipboard.writeText(GAS_CODE_STRING)
+                    .then(() => alert("GASのコードをコピーしました！"))
+                    .catch(() => alert("コピーに失敗しました。"));
+            };
+
+            const handleRecordTake = () => {
+                const currentData = { project, date, locationName, hashira, roll, scene, cut, take, fileNo, cameraInfo, camClip, evaluation, memo, channels: [...channels] };
+                
+                if (project && !projectHistory.includes(project)) {
+                    const newProjHistory = [project, ...projectHistory];
+                    setProjectHistory(newProjHistory);
+                    localStorage.setItem('projectHistory', JSON.stringify(newProjHistory));
+                }
+                
+                if (locationName && !locationHistory.includes(locationName)) {
+                    const newLocHistory = [locationName, ...locationHistory];
+                    setLocationHistory(newLocHistory);
+                    localStorage.setItem('locationHistory', JSON.stringify(newLocHistory));
+                }
+
+                if (hashira && !hashiraHistory.includes(hashira)) {
+                    const newHashiraHistory = [hashira, ...hashiraHistory];
+                    setHashiraHistory(newHashiraHistory);
+                    localStorage.setItem('hashiraHistory', JSON.stringify(newHashiraHistory));
+                }
+
+                if (cameraInfo && !cameraHistory.includes(cameraInfo)) {
+                    const newCamHistory = [cameraInfo, ...cameraHistory];
+                    setCameraHistory(newCamHistory);
+                    localStorage.setItem('cameraHistory', JSON.stringify(newCamHistory));
+                }
+
+                if (scene && !sceneHistory.includes(scene)) {
+                    const newSceneHistory = [scene, ...sceneHistory];
+                    setSceneHistory(newSceneHistory);
+                    localStorage.setItem('sceneHistory', JSON.stringify(newSceneHistory));
+                }
+
+                if (cut && !cutHistory.includes(cut)) {
+                    const newCutHistory = [cut, ...cutHistory];
+                    setCutHistory(newCutHistory);
+                    localStorage.setItem('cutHistory', JSON.stringify(newCutHistory));
+                }
+
+                if (editingIndex !== null) {
+                    const newHistory = [...history];
+                    newHistory[editingIndex] = currentData;
+                    updateHistoryAndSave(newHistory);
+                    setEditingIndex(null);
+                    setTake(prev => prev + 1);
+                } else {
+                    updateHistoryAndSave([currentData, ...history]); 
+                    setTake(prev => prev + 1);
+                }
+                
+                setCamClip("");
+                setFileNo("");
+                setMemo("");
+                setEvaluation("OK");
+            };
+
+            const handleEdit = (index) => {
+                const item = history[index];
+                setProject(item.project);
+                setDate(item.date);
+                setLocationName(item.locationName || "");
+                setHashira(item.hashira || "");
+                setRoll(item.roll);
+                setScene(item.scene);
+                setCut(item.cut || "");
+                setTake(item.take);
+                setFileNo(item.fileNo || "");
+                setCameraInfo(item.cameraInfo || "");
+                setCamClip(item.camClip || "");
+                setEvaluation(item.evaluation);
+                setMemo(item.memo);
+                setChannels([...item.channels]);
+                setEditingIndex(index);
+                setCurrentTab("recorder");
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            };
+
+            const handleDeleteItem = (index) => {
+                if (confirm("この記録を削除しますか？")) {
+                    const newHistory = history.filter((_, i) => i !== index);
+                    updateHistoryAndSave(newHistory);
+                    if (editingIndex === index) setEditingIndex(null);
+                }
+            };
+
+            const handleClearAllHistory = () => {
+                if (confirm("保存待ちのテイクをすべて削除しますか？")) {
+                    updateHistoryAndSave([]);
+                    setEditingIndex(null);
+                }
+            };
+
+            const handleBatchSubmit = async () => {
+                if (isSubmitting) return;
+                if (history.length === 0) return alert("送信するデータがありません。");
+                if (!project) return alert("作品名を入力してください。");
+
+                const currentFolderId = localStorage.getItem('targetFolderIdShare');
+                const currentGasUrl = localStorage.getItem('gasUrlShare');
+                
+                if (!currentFolderId) {
+                    alert("保存先のGoogleドライブ フォルダIDが設定されていません。⚙️設定から入力してください。");
+                    setShowSettings(true);
+                    return;
+                }
+                if (!currentGasUrl) {
+                    alert("GAS Webアプリ URLが設定されていません。⚙️設定から自分用のURLを入力してください。");
+                    setShowSettings(true);
+                    return;
+                }
+
+                setIsSubmitting(true);
+                
+                const payloadRecords = [...history].reverse().map(item => {
+                    let combinedMemo = item.memo || "";
+                    let tags = [];
+                    if (item.locationName) tags.push(`📍${item.locationName}`);
+                    if (item.hashira) tags.push(`柱:${item.hashira}`);
+                    if (item.cameraInfo) tags.push(`🎥${item.cameraInfo}`);
+                    if (item.camClip) tags.push(`ｸﾘｯﾌﾟ:${item.camClip}`);
+                    
+                    let prefix = tags.length > 0 ? `[${tags.join(" ")}] ` : "";
+                    return { ...item, memo: prefix + combinedMemo };
+                });
+                
+                const payload = { project: project, folderId: currentFolderId, records: payloadRecords };
+
+                try {
+                    const response = await fetch(currentGasUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'text/plain' },
+                        body: JSON.stringify(payload)
+                    });
+                    
+                    const result = await response.json();
+                    if (result.status === "success") {
+                        alert(`${history.length}件のテイクを送信しました！`);
+                        updateHistoryAndSave([]); 
+                    } else {
+                        alert("送信エラー: " + result.message);
+                    }
+                } catch (error) {
+                    alert("送信に失敗しました。URLや電波状況を確認してください。");
+                } finally {
+                    setIsSubmitting(false);
+                }
+            };
+
+            const currentFolderName = localStorage.getItem('targetFolderNameShare');
+
+            return (
+                <div className="w-full max-w-md md:max-w-4xl lg:max-w-5xl mx-auto p-4 pb-20">
+                    <div className="flex justify-between items-center mb-2 border-b border-gray-700 pb-2">
+                        <div className="flex items-center gap-2">
+                            <h1 className="text-lg font-bold text-gray-200">🎙️ 録音スクリプト <span className="text-xs bg-purple-900 text-purple-200 px-1.5 py-0.5 rounded">共有版</span></h1>
+                            <button onClick={() => setShowSettings(true)} className="bg-gray-700 text-gray-200 px-2 py-1 rounded text-xs">
+                                ⚙️ 設定
+                            </button>
+                        </div>
+                        <div className="flex gap-1">
+                            <button onClick={() => setCurrentTab("recorder")} className={`px-3 py-1 rounded text-xs font-bold ${currentTab === 'recorder' ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-400'}`}>📝 記録</button>
+                            <button onClick={() => setCurrentTab("manual")} className={`px-3 py-1 rounded text-xs font-bold ${currentTab === 'manual' ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-400'}`}>📖 使い方</button>
+                            <button onClick={openFlightradar} className="bg-blue-900 text-white px-2 py-1 rounded text-xs">✈️</button>
+                            <button onClick={openTenki} className="bg-orange-600 text-white px-2 py-1 rounded text-xs">🌤️</button>
+                        </div>
+                    </div>
+
+                    <div className="bg-gray-800 px-3 py-1.5 rounded mb-4 text-xs flex justify-between items-center border border-gray-700">
+                        <span className="text-gray-400">📁 保存先:</span>
+                        <span className="text-blue-300 font-bold truncate max-w-[260px] md:max-w-md">
+                            {currentFolderName ? currentFolderName : "（未設定：設定してください）"}
+                        </span>
+                    </div>
+
+                    {showSettings && (
+                        <div className="modal p-4">
+                            <div className="bg-gray-800 p-4 rounded-lg w-full max-w-md border border-gray-700 max-h-[90vh] overflow-y-auto">
+                                <h2 className="text-lg font-bold mb-4 text-white border-b border-gray-600 pb-2">⚙️ 共有版 詳細設定</h2>
+                                
+                                <div className="mb-4">
+                                    <label className="text-xs text-blue-300 font-bold block mb-1">📁 スプレッドシートの保存先設定</label>
+                                    <label className="text-xs text-gray-400 block mb-1">フォルダ名（わかりやすい名前）</label>
+                                    <input type="text" value={folderNameInput} onChange={(e) => setFolderNameInput(e.target.value)} placeholder="例: 〇〇映画 録音データ" className="mb-2 text-sm" />
+                                    <label className="text-xs text-gray-400 block mb-1">Googleドライブ フォルダURL</label>
+                                    <textarea value={folderInput} onChange={handleFolderInputChange} placeholder="https://drive.google.com/drive/folders/..." rows="2" className="text-sm font-mono"></textarea>
+                                </div>
+
+                                <div className="mb-4 pt-3 border-t border-gray-700">
+                                    <label className="text-xs text-green-400 font-bold block mb-1">🔌 システム連携設定 (GAS)</label>
+                                    <label className="text-xs text-gray-400 block mb-1">自分用の GAS Webアプリ URL</label>
+                                    <textarea value={gasUrlInput} onChange={(e) => setGasUrlInput(e.target.value)} placeholder="https://script.google.com/macros/s/..." rows="3" className="text-xs font-mono"></textarea>
+                                </div>
+
+                                <div className="mb-6 pt-3 border-t border-gray-700 text-center">
+                                    <p className="text-xs text-gray-400 mb-2">このツールを気に入っていただけたら支援できます</p>
+                                    <a href="https://buymeacoffee.com/thunder__" target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center gap-2 bg-[#FFDD00] text-black font-bold text-xs py-2 px-4 rounded hover:bg-[#ffea40] transition">
+                                        <span>☕</span> 作者をコーヒーで応援する
+                                    </a>
+                                </div>
+
+                                <div className="flex gap-2">
+                                    <button onClick={saveSettings} className="flex-1 bg-blue-600 text-white py-2 rounded font-bold">保存する</button>
+                                    <button onClick={() => setShowSettings(false)} className="flex-1 bg-gray-600 text-white py-2 rounded">閉じる</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {currentTab === 'recorder' && (
+                        <div className="flex flex-col md:flex-row gap-6">
+                            
+                            <div className="flex-1">
+                                <div className="grid grid-cols-2 gap-2 mb-4">
+                                    <div>
+                                        <label className="text-xs text-gray-400">作品名</label>
+                                        <input type="text" value={project} onChange={handleProjectChange} placeholder="映画タイトルなど" list="project-list" />
+                                        <datalist id="project-list">{projectHistory.map((pName, idx) => <option key={idx} value={pName} />)}</datalist>
+                                    </div>
+                                    <div>
+                                        <label className="text-xs text-gray-400">日付</label>
+                                        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+                                    </div>
+                                </div>
+                                
+                                <div className="grid grid-cols-2 gap-2 mb-4">
+                                    <div>
+                                        <label className="text-xs text-gray-400">ロケ地</label>
+                                        <input type="text" value={locationName} onChange={(e) => setLocationName(e.target.value)} placeholder="例: 〇〇スタジオ" list="location-list" />
+                                        <datalist id="location-list">{locationHistory.map((loc, idx) => <option key={idx} value={loc} />)}</datalist>
+                                    </div>
+                                    <div>
+                                        <label className="text-xs text-gray-400">シーンの柱</label>
+                                        <input type="text" value={hashira} onChange={(e) => setHashira(e.target.value)} placeholder="例: 〇〇公園（昼）" list="hashira-list" />
+                                        <datalist id="hashira-list">{hashiraHistory.map((h, idx) => <option key={idx} value={h} />)}</datalist>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-4 gap-2 mb-4">
+                                    <div><label className="text-xs text-gray-400">ロール</label><input type="text" value={roll} onChange={(e) => setRoll(e.target.value)} /></div>
+                                    <div><label className="text-xs text-gray-400">シーン</label><input type="text" value={scene} onChange={(e) => { setScene(e.target.value); setTake(1); }} list="scene-list" /><datalist id="scene-list">{sceneHistory.map((sNum, idx) => <option key={idx} value={sNum} />)}</datalist></div>
+                                    <div><label className="text-xs text-gray-400">カット</label><input type="text" value={cut} onChange={(e) => { setCut(e.target.value); setTake(1); }} placeholder="例: A" list="cut-list" /><datalist id="cut-list">{cutHistory.map((cName, idx) => <option key={idx} value={cName} />)}</datalist></div>
+                                    <div><label className="text-xs text-gray-400">テイク</label><input type="number" value={take} onChange={(e) => setTake(Number(e.target.value))} /></div>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-2 mb-4">
+                                    <div>
+                                        <label className="text-xs text-gray-400">カメラ情報</label>
+                                        <input type="text" value={cameraInfo} onChange={(e) => setCameraInfo(e.target.value)} placeholder="例: Aカメ" list="camera-list" />
+                                        <datalist id="camera-list">{cameraHistory.map((c, idx) => <option key={idx} value={c} />)}</datalist>
+                                    </div>
+                                    <div>
+                                        <label className="text-xs text-gray-400">カメラ クリップ名</label>
+                                        <input type="text" value={camClip} onChange={(e) => setCamClip(e.target.value)} placeholder="例: C001" />
+                                    </div>
+                                </div>
+
+                                <div className="mb-4">
+                                    <label className="text-xs text-gray-400">レコーダー ファイル番号</label>
+                                    <input type="text" value={fileNo} onChange={(e) => setFileNo(e.target.value)} placeholder="例: T0123" />
+                                </div>
+
+                                <div className="flex gap-2 mb-4">
+                                    <div className={`flex-1 btn ${evaluation === 'OK' ? 'btn-ok' : 'bg-gray-700'}`} onClick={() => setEvaluation('OK')}>OK</div>
+                                    <div className={`flex-1 btn ${evaluation === 'KEEP' ? 'btn-keep' : 'bg-gray-700'}`} onClick={() => setEvaluation('KEEP')}>KEEP</div>
+                                    <div className={`flex-1 btn ${evaluation === 'NG' ? 'btn-ng' : 'bg-gray-700'}`} onClick={() => setEvaluation('NG')}>NG</div>
+                                </div>
+
+                                <div className="mb-4">
+                                    <label className="text-xs text-gray-400">備考 (ノイズ・セリフかぶり等)</label>
+                                    <textarea value={memo} onChange={(e) => setMemo(e.target.value)} rows="2"></textarea>
+                                </div>
+
+                                <div className="mb-6">
+                                    <label className="text-xs text-gray-400 mb-1 block">マイク / チャンネル (Ch1 - Ch8)</label>
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                                        {channels.map((ch, idx) => (
+                                            <div key={idx} className="flex items-center">
+                                                <span className="text-xs text-gray-500 w-8">Ch{idx + 1}</span>
+                                                <input type="text" value={ch} onChange={(e) => handleChannelChange(idx, e.target.value)} className="text-sm" placeholder="マイク名" />
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div className={`btn w-full ${editingIndex !== null ? 'bg-orange-500 text-white' : 'btn-save'}`} onClick={handleRecordTake}>
+                                    {editingIndex !== null ? '修正を反映する' : 'テイクを記録（アプリ内に保存）'}
+                                </div>
+
+                                <div className="banner-ad-container">
+                                    <span className="text-[9px] text-gray-500 mb-0.5">スポンサーリンク</span>
+                                    <div style={{color: '#666', fontSize: '11px'}}>
+                                        [ バナー広告エリア ]
+                                    </div>
+                                </div>
+                            </div>
+
+                            {history.length > 0 && (
+                                <div className="md:w-[350px] lg:w-[450px] shrink-0 mt-8 md:mt-0">
+                                    <div className="md:sticky md:top-4">
+                                        <div className="flex justify-between items-center mb-3 border-b border-gray-600 pb-1">
+                                            <h2 className="text-lg font-bold text-gray-300">保存待ち ({history.length}件)</h2>
+                                            <button onClick={handleClearAllHistory} className="text-xs bg-red-900/80 text-red-200 border border-red-600 px-2.5 py-1 rounded font-bold">全削除 🗑️</button>
+                                        </div>
+                                        
+                                        <div className="max-h-[60vh] md:max-h-[70vh] overflow-y-auto pr-1">
+                                            {history.map((item, index) => {
+                                                let evClass = "history-ok";
+                                                if (item.evaluation === "KEEP") evClass = "history-keep";
+                                                if (item.evaluation === "NG") evClass = "history-ng";
+                                                return (
+                                                    <div key={index} className={`history-item ${evClass} flex justify-between items-center gap-2`}>
+                                                        <div className="flex-1 min-w-0">
+                                                            <div className="font-bold text-sm truncate">
+                                                                Sc:{item.scene} / Cut:{item.cut || "-"} / Tk:{item.take} {item.fileNo ? `(` + item.fileNo + `)` : ''}
+                                                                <span className="ml-2 text-xs px-1.5 py-0.5 bg-gray-700 rounded">{item.evaluation}</span>
+                                                            </div>
+                                                            {(item.locationName || item.hashira || item.cameraInfo || item.camClip) && (
+                                                                <div className="text-xs text-blue-300 mt-1 truncate">
+                                                                    {item.locationName && <span>📍 {item.locationName} </span>}
+                                                                    {item.hashira && <span>📝 {item.hashira} </span>}
+                                                                    {item.cameraInfo && <span>🎥 {item.cameraInfo} </span>}
+                                                                    {item.camClip && <span>[ｸﾘｯﾌﾟ:{item.camClip}]</span>}
+                                                                </div>
+                                                            )}
+                                                            {item.memo && <div className="text-xs text-gray-400 mt-1 truncate">{item.memo}</div>}
+                                                        </div>
+                                                        <div className="flex items-center gap-1 shrink-0">
+                                                            <button onClick={() => handleEdit(index)} className="text-xs bg-gray-600 text-white px-2 py-1.5 rounded font-bold">修正</button>
+                                                            <button onClick={() => handleDeleteItem(index)} className="text-xs bg-red-800 text-white px-2 py-1.5 rounded font-bold">削除 🗑️</button>
+                                                        </div>
+                                                    </div>
+                                                )
+                                            })}
+                                        </div>
+                                        
+                                        <div className={`btn w-full mt-4 ${isSubmitting ? 'btn-submitting' : 'btn-submit'}`} onClick={handleBatchSubmit}>
+                                            {isSubmitting ? '送信中...' : 'スプレッドシートへ一括送信 🚀'}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {currentTab === 'manual' && (
+                        <div className="text-sm text-gray-300 space-y-6 md:max-w-3xl">
+                            <div className="bg-gray-800 p-4 rounded-lg border border-gray-700">
+                                <h3 className="font-bold text-white text-base mb-2">📌 共有版の使い方</h3>
+                                <ol className="list-decimal list-inside space-y-3 text-xs text-gray-300">
+                                    <li><b>初期設定:</b> 画面左上の「⚙️設定」ボタンを押し、自分用のGASのURLと保存先のドライブフォルダURLを設定します。</li>
+                                    <li><b>テイク記録:</b> ロケ地・シーン・カット・テイクなどを入力し、「テイクを記録」を押します。</li>
+                                    <li><b>一括送信:</b> 「スプレッドシートへ一括送信🚀」で、設定したGoogleドライブにデータが自動で飛びます。</li>
+                                </ol>
+                            </div>
+
+                            <div className="bg-gray-800 p-4 rounded-lg border border-gray-700">
+                                <h3 className="font-bold text-blue-300 text-base mb-2">👤 自分専用のGASを作る手順</h3>
+                                <ol className="list-decimal list-inside space-y-4 text-xs text-gray-300">
+                                    <li className="font-bold text-sm text-white">専用のGASを作成する</li>
+                                    <div className="pl-4 space-y-2">
+                                        <p>1. <a href="https://script.google.com/" target="_blank" className="text-blue-400 underline">Google Apps Script</a> にアクセスし、新しいプロジェクトを作成します。</p>
+                                        <p>2. コードをすべて消して、以下のコードを貼り付けます。</p>
+                                        <div className="relative">
+                                            <textarea readOnly value={GAS_CODE_STRING} rows="5" className="w-full text-[10px] font-mono bg-gray-900 p-2 rounded border border-gray-600"></textarea>
+                                            <button onClick={copyGasCode} className="absolute top-2 right-2 bg-blue-600 text-white px-2 py-1 rounded text-xs font-bold shadow hover:bg-blue-500">コピー</button>
+                                        </div>
+                                        <p>3. 右上の「デプロイ」＞「新しいデプロイ」＞「ウェブアプリ」を選択します。</p>
+                                        <p className="text-red-300 font-bold">4. アクセスできるユーザーを「全員 (Anyone)」にしてデプロイします。</p>
+                                        <p>5. 発行されたURLをコピーします。</p>
+                                    </div>
+                                    <li className="font-bold text-sm text-white mt-4">アプリにURLを設定する</li>
+                                    <div className="pl-4">
+                                        <p>画面左上の「⚙️設定」を開き、「GAS Webアプリ URL」の欄に自分のURLを貼り付けて保存します。</p>
+                                    </div>
+                                </ol>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
+</body>
+</html>
