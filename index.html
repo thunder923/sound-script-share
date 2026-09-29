@@ -11,9 +11,6 @@
     <script src="https://unpkg.com/react@17/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@17/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
-    
-    <!-- Google AdSense スクリプト -->
-    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-6281950220310365" crossorigin="anonymous"></script>
 
     <style>
         body { background-color: #121212; color: #e0e0e0; font-family: sans-serif; }
@@ -39,7 +36,7 @@
             padding: 8px; 
             margin-top: 24px; 
             border-radius: 4px;
-            min-height: 100px;
+            min-height: 260px;
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -114,6 +111,22 @@ function doGet(e) {
 }`;
 
         function App() {
+            // A8.netのバナーコードリスト（3種類を登録済み）
+            const adList = [
+                `<a href="https://px.a8.net/svt/ejp?a8mat=4BCMO5+CLOBQQ+4V0U+ZRALD" rel="nofollow"><img border="0" width="300" height="250" alt="" src="https://www29.a8.net/svt/bgt?aid=260929733762&wid=001&eno=01&mid=s00000022683006006000&mc=1"></a><img border="0" width="1" height="1" src="https://www13.a8.net/0.gif?a8mat=4BCMO5+CLOBQQ+4V0U+ZRALD" alt="">`,
+                `<a href="https://px.a8.net/svt/ejp?a8mat=4BCMO5+EAZZ1U+2Z0I+IHXRL" rel="nofollow"><img border="0" width="300" height="250" alt="" src="https://www23.a8.net/svt/bgt?aid=260929733865&wid=001&eno=01&mid=s00000013869003107000&mc=1"></a><img border="0" width="1" height="1" src="https://www17.a8.net/0.gif?a8mat=4BCMO5+EAZZ1U+2Z0I+IHXRL" alt="">`,
+                `<a href="https://rpx.a8.net/svt/ejp?a8mat=4BCMO5+9KQ01E+2HOM+5YZ75&rakuten=y&a8ejpredirect=http%3A%2F%2Fhb.afl.rakuten.co.jp%2Fhgc%2F0ea62065.34400275.0ea62066.204f04c0%2Fa26092964658_4BCMO5_9KQ01E_2HOM_5YZ75%3Fpc%3Dhttp%253A%252F%252Fwww.rakuten.co.jp%252F%26m%3Dhttp%253A%252F%252Fm.rakuten.co.jp%252F" rel="nofollow"><img src="http://hbb.afl.rakuten.co.jp/hsb/0eb4bbad.93f29c77.0eb4bbaa.95151395/" border="0"></a><img border="0" width="1" height="1" src="https://www16.a8.net/0.gif?a8mat=4BCMO5+9KQ01E+2HOM+5YZ75" alt="">`
+            ];
+
+            const [randomAd, setRandomAd] = useState("");
+
+            useEffect(() => {
+                if (adList.length > 0) {
+                    const randomIndex = Math.floor(Math.random() * adList.length);
+                    setRandomAd(adList[randomIndex]);
+                }
+            }, []);
+
             const loadState = (key, defaultVal) => {
                 const saved = localStorage.getItem(key);
                 return saved ? JSON.parse(saved) : defaultVal;
@@ -163,17 +176,6 @@ function doGet(e) {
             const [folderInput, setFolderInput] = useState(localStorage.getItem('targetFolderIdShare') || "");
             const [folderNameInput, setFolderNameInput] = useState(localStorage.getItem('targetFolderNameShare') || "");
             const [gasUrlInput, setGasUrlInput] = useState(localStorage.getItem('gasUrlShare') || "");
-
-            // AdSense 広告の自動初期化
-            useEffect(() => {
-                try {
-                    if (window.adsbygoogle) {
-                        (window.adsbygoogle = window.adsbygoogle || []).push({});
-                    }
-                } catch (e) {
-                    console.error("AdSense Error:", e);
-                }
-            }, [currentTab]);
 
             const handleFolderInputChange = (e) => {
                 const input = e.target.value;
@@ -507,14 +509,12 @@ function doGet(e) {
                                     {editingIndex !== null ? '修正を反映する' : 'テイクを記録（アプリ内に保存）'}
                                 </div>
 
-                                {/* AdSense 広告表示領域 */}
+                                {/* A8.net ランダム広告表示領域 */}
                                 <div className="banner-ad-container">
                                     <span className="text-[9px] text-gray-500 mb-0.5">スポンサーリンク</span>
-                                    <ins className="adsbygoogle"
-                                         style={{display: 'block', width: '100%'}}
-                                         data-ad-client="ca-pub-6281950220310365"
-                                         data-ad-format="auto"
-                                         data-full-width-responsive="true"></ins>
+                                    {randomAd && (
+                                        <div dangerouslySetInnerHTML={{ __html: randomAd }} />
+                                    )}
                                 </div>
                             </div>
 
