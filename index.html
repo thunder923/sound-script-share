@@ -53,44 +53,45 @@
         const GAS_CODE_STRING = `function doPost(e) {
   try {
     var data = JSON.parse(e.postData.contents);
+    if (data.action === "update") return updateRecord_(data);
     var projectName = data.project || "未定_録音スクリプト";
     var folderId = data.folderId;
     var records = data.records;
-    
-    if (!records || records.length === 0) return ContentService.createTextOutput(JSON.stringify({"status": "success", "message": "データなし"})).setMimeType(ContentService.MimeType.JSON);
-    if (!folderId) return ContentService.createTextOutput(JSON.stringify({"status": "error", "message": "フォルダID未設定"})).setMimeType(ContentService.MimeType.JSON);
+
+    if (!records || records.length === 0) return jsonOut_({"status": "success", "message": "データなし"});
+    if (!folderId) return jsonOut_({"status": "error", "message": "フォルダID未設定"});
 
     var folder = DriveApp.getFolderById(folderId);
     var files = folder.searchFiles("title = '" + projectName + "' and mimeType = 'application/vnd.google-apps.spreadsheet'");
     var ss = files.hasNext() ? SpreadsheetApp.open(files.next()) : (function(){ var newSs = SpreadsheetApp.create(projectName); DriveApp.getFileById(newSs.getId()).moveTo(folder); return newSs; })();
-    
+
     for (var i = 0; i < records.length; i++) {
       var r = records[i];
       var dateStr = r.date || "未設定";
       var sheet = ss.getSheetByName(dateStr);
-      
+
       if (!sheet) {
         sheet = ss.insertSheet(dateStr);
         sheet.appendRow(["日付", "ロール", "シーン", "カット", "テイク", "ファイルNo", "評価", "備考", "Ch1", "Ch2", "Ch3", "Ch4", "Ch5", "Ch6", "Ch7", "Ch8"]);
         var defaultSheet = ss.getSheetByName("シート1");
         if (defaultSheet && ss.getSheets().length > 1) ss.deleteSheet(defaultSheet);
       }
-      
+
       var lastRow = sheet.getLastRow();
       var targetRow = -1;
-      
+
       if (lastRow > 1) {
         var existingData = sheet.getRange(2, 1, lastRow - 1, 5).getValues();
         for (var j = 0; j < existingData.length; j++) {
           var row = existingData[j];
-          if (String(row[0]) === String(r.date) && String(row[1]) === String(r.roll) && String(row[2]) === String(r.scene) && String(row[3]) === String(r.cut) && Number(row[4]) === Number(r.take)) {
+          if (fmtDate_(row[0]) === String(r.date) && String(row[1]) === String(r.roll) && String(row[2]) === String(r.scene) && String(row[3]) === String(r.cut) && Number(row[4]) === Number(r.take)) {
             targetRow = j + 2; break;
           }
         }
       }
-      
+
       var rowData = [r.date, r.roll, r.scene, r.cut, r.take, r.fileNo, r.evaluation, r.memo, r.channels[0], r.channels[1], r.channels[2], r.channels[3], r.channels[4], r.channels[5], r.channels[6], r.channels[7]];
-      
+
       if (targetRow !== -1) {
         sheet.getRange(targetRow, 1, 1, rowData.length).setValues([rowData]);
       } else {
@@ -99,16 +100,123 @@
       }
       sheet.getRange(targetRow, 7).setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(['OK', 'KEEP', 'NG']).build());
     }
-    
-    return ContentService.createTextOutput(JSON.stringify({"status": "success"})).setMimeType(ContentService.MimeType.JSON);
+
+    return jsonOut_({"status": "success"});
   } catch(error) {
-    return ContentService.createTextOutput(JSON.stringify({"status": "error", "message": error.message})).setMimeType(ContentService.MimeType.JSON);
+    return jsonOut_({"status": "error", "message": error.message});
   }
 }
 
 function doGet(e) {
-  return ContentService.createTextOutput(JSON.stringify({"status": "active", "message": "GAS is running"})).setMimeType(ContentService.MimeType.JSON);
-}`;
+  var p = (e && e.parameter) || {};
+  if (!p.mode) return jsonOut_({"status": "active", "message": "GAS is running", "viewer": "v2"});
+  try {
+    if (!p.folderId) return jsonOut_({"status": "error", "message": "フォルダID未設定"});
+    var folder = DriveApp.getFolderById(p.folderId);
+
+    if (p.mode === "list") {
+      return jsonOut_({"status": "success", "projects": listProjects_(folder)});
+    }
+    if (p.mode === "data") {
+      var ss = null;
+      if (p.spreadsheetId) {
+        ss = SpreadsheetApp.openById(p.spreadsheetId);
+      } else if (p.project) {
+        var files = folder.searchFiles("title = '" + p.project + "' and mimeType = 'application/vnd.google-apps.spreadsheet'");
+        if (files.hasNext()) ss = SpreadsheetApp.open(files.next());
+      }
+      if (!ss) return jsonOut_({"status": "error", "message": "作品のスプレッドシートが見つかりません"});
+      return jsonOut_({"status": "success", "project": ss.getName(), "spreadsheetId": ss.getId(), "dates": readSpreadsheet_(ss)});
+    }
+    if (p.mode === "all") {
+      var projects = [];
+      var it = folder.searchFiles("mimeType = 'application/vnd.google-apps.spreadsheet'");
+      while (it.hasNext()) {
+        var f = it.next();
+        var book = SpreadsheetApp.open(f);
+        projects.push({"project": f.getName(), "spreadsheetId": f.getId(), "dates": readSpreadsheet_(book)});
+      }
+      return jsonOut_({"status": "success", "projects": projects});
+    }
+    return jsonOut_({"status": "error", "message": "不明なmodeです: " + p.mode});
+  } catch(error) {
+    return jsonOut_({"status": "error", "message": error.message});
+  }
+}
+
+function updateRecord_(data) {
+  if (!data.folderId) return jsonOut_({"status": "error", "message": "フォルダID未設定"});
+  var folder = DriveApp.getFolderById(data.folderId);
+  var files = folder.searchFiles("title = '" + data.project + "' and mimeType = 'application/vnd.google-apps.spreadsheet'");
+  if (!files.hasNext()) return jsonOut_({"status": "error", "message": "作品が見つかりません"});
+  var ss = SpreadsheetApp.open(files.next());
+  var sheet = ss.getSheetByName(String(data.date));
+  if (!sheet) return jsonOut_({"status": "error", "message": "日付シートが見つかりません"});
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return jsonOut_({"status": "error", "message": "対象行が見つかりません"});
+  var vals = sheet.getRange(2, 1, lastRow - 1, 5).getValues();
+  for (var j = 0; j < vals.length; j++) {
+    var row = vals[j];
+    if (fmtDate_(row[0]) === String(data.date) && String(row[1]) === String(data.roll) && String(row[2]) === String(data.scene) && String(row[3]) === String(data.cut) && Number(row[4]) === Number(data.take)) {
+      var target = j + 2;
+      if (data.evaluation) sheet.getRange(target, 7).setValue(data.evaluation);
+      if (typeof data.memo !== "undefined") sheet.getRange(target, 8).setValue(data.memo);
+      return jsonOut_({"status": "success"});
+    }
+  }
+  return jsonOut_({"status": "error", "message": "対象行が見つかりません"});
+}
+
+function listProjects_(folder) {
+  var out = [];
+  var it = folder.searchFiles("mimeType = 'application/vnd.google-apps.spreadsheet'");
+  while (it.hasNext()) {
+    var f = it.next();
+    out.push({"project": f.getName(), "spreadsheetId": f.getId(), "lastModified": f.getLastUpdated().toISOString()});
+  }
+  return out;
+}
+
+function readSpreadsheet_(ss) {
+  var dates = [];
+  var sheets = ss.getSheets();
+  for (var s = 0; s < sheets.length; s++) {
+    var sheet = sheets[s];
+    var values = sheet.getDataRange().getValues();
+    var records = [];
+    for (var i = 1; i < values.length; i++) {
+      var v = values[i];
+      var blank = true;
+      for (var k = 0; k < v.length; k++) { if (String(v[k]) !== "") { blank = false; break; } }
+      if (blank) continue;
+      var channels = [];
+      for (var c = 0; c < 8; c++) channels.push(String(v[8 + c] || ""));
+      records.push({
+        "date": fmtDate_(v[0]) || sheet.getName(),
+        "roll": String(v[1] || ""),
+        "scene": String(v[2] || ""),
+        "cut": String(v[3] || ""),
+        "take": (v[4] === "" || v[4] === null) ? "" : (isNaN(Number(v[4])) ? String(v[4]) : Number(v[4])),
+        "fileNo": String(v[5] || ""),
+        "evaluation": String(v[6] || ""),
+        "memo": String(v[7] || ""),
+        "channels": channels
+      });
+    }
+    if (records.length > 0) dates.push({"date": sheet.getName(), "records": records});
+  }
+  return dates;
+}
+
+function fmtDate_(v) {
+  if (v instanceof Date) return Utilities.formatDate(v, Session.getScriptTimeZone(), "yyyy-MM-dd");
+  return String(v || "");
+}
+
+function jsonOut_(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
+}
+`;
 
         function App() {
             // A8.netのバナーコードリスト（4種類を登録済み）
@@ -384,6 +492,7 @@ function doGet(e) {
                         <div className="flex gap-1">
                             <button onClick={() => setCurrentTab("recorder")} className={`px-3 py-1 rounded text-xs font-bold ${currentTab === 'recorder' ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-400'}`}>📝 記録</button>
                             <button onClick={() => setCurrentTab("manual")} className={`px-3 py-1 rounded text-xs font-bold ${currentTab === 'manual' ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-400'}`}>📖 使い方</button>
+                            <a href="viewer.html" className="px-3 py-1 rounded text-xs font-bold bg-gray-800 text-gray-400" style={{textDecoration: "none", display: "inline-flex", alignItems: "center"}}>📊 管理</a>
                             <button onClick={openFlightradar} className="bg-blue-900 text-white px-2 py-1 rounded text-xs">✈️</button>
                             <button onClick={openTenki} className="bg-orange-600 text-white px-2 py-1 rounded text-xs">🌤️</button>
                         </div>

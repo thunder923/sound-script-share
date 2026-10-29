@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<title>録音スクリプト 管理ビューア (共有版)</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎙️</text></svg>">
+<style>
+  * { box-sizing: border-box; }
+  body { background:#121212; color:#e0e0e0; font-family:sans-serif; margin:0; }
+  .wrap { max-width:1100px; margin:0 auto; padding:16px 16px 60px; }
+  h1 { font-size:18px; margin:0; }
+  a { color:#7db8f0; }
+  input, select, textarea { background:#2d2d2d; color:#fff; border:1px solid #444; padding:8px; border-radius:4px; }
+  input:focus, textarea:focus { outline:none; border-color:#4CAF50; }
+  button { cursor:pointer; border:none; border-radius:6px; font-weight:bold; padding:8px 12px; background:#374151; color:#e5e7eb; }
+  button.primary { background:#2196F3; color:#fff; }
+  button.green { background:#2e7d32; color:#fff; }
+  .card { background:#1e1e1e; border:1px solid #333; border-radius:8px; padding:12px; margin-bottom:12px; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  .seg { display:flex; gap:4px; }
+  .seg button { background:#262626; color:#9ca3af; border:1px solid #3f3f46; }
+  .seg button.on { background:#2563eb; color:#fff; border-color:#2563eb; }
+  .chip { display:inline-block; font-size:11px; padding:1px 6px; border-radius:999px; background:#333; color:#cbd5e1; margin-right:4px; }
+  .chip.ok { background:#1b5e20; color:#c8e6c9; } .chip.keep { background:#6d4c00; color:#ffe082; } .chip.ng { background:#7f1d1d; color:#fecaca; }
+  .evchip { cursor:pointer; user-select:none; opacity:.35; }
+  .evchip.on { opacity:1; }
+  details.group { background:#1a1a1a; border:1px solid #2c2c2c; border-left:4px solid #2563eb; border-radius:6px; margin-bottom:8px; }
+  details.group.lv2 { border-left-color:#555; margin:8px 0 8px 10px; }
+  details.group.lv3 { border-left-color:#2e7d32; margin:8px 0 8px 10px; }
+  details.group > summary { cursor:pointer; padding:10px 12px; font-weight:bold; font-size:14px; list-style:none; }
+  details.group > summary::-webkit-details-marker { display:none; }
+  details.group > summary .cnt { color:#9ca3af; font-weight:normal; font-size:12px; margin-left:6px; }
+  .tblwrap { overflow-x:auto; padding:0 10px 10px; }
+  table { border-collapse:collapse; width:100%; font-size:12px; min-width:640px; }
+  th, td { border-bottom:1px solid #2c2c2c; padding:6px 6px; text-align:left; vertical-align:top; }
+  th { color:#9ca3af; font-weight:bold; white-space:nowrap; }
+  td.memo { min-width:180px; white-space:pre-wrap; word-break:break-word; }
+  .evsel { padding:4px; font-size:12px; font-weight:bold; }
+  .ev-OK { color:#81c784; } .ev-KEEP { color:#ffd54f; } .ev-NG { color:#e57373; }
+  .small { font-size:12px; color:#9ca3af; }
+  .err { background:#3b1111; border:1px solid #7f1d1d; color:#fecaca; border-radius:6px; padding:10px 12px; margin-bottom:12px; font-size:13px; }
+  .oknote { background:#12351a; border:1px solid #2e7d32; color:#c8e6c9; border-radius:6px; padding:10px 12px; margin-bottom:12px; font-size:13px; }
+  .editbtn { background:none; padding:2px 4px; font-size:12px; }
+  textarea.gascode { width:100%; font-family:monospace; font-size:10px; }
+  .stat b { font-size:16px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="row" style="justify-content:space-between; border-bottom:1px solid #333; padding-bottom:10px; margin-bottom:12px;">
+    <h1>🎙️ 録音スクリプト 管理（共有版）</h1>
+    <div class="row">
+      <a href="index.html" style="font-size:12px;">📝 記録アプリへ</a>
+      <button id="btnSettings">⚙️ 設定</button>
+    </div>
+  </div>
+
+  <div id="settings" class="card" style="display:none;">
+    <div style="font-weight:bold; margin-bottom:8px;">⚙️ 接続設定（記録アプリと共通）</div>
+    <label class="small">GAS Webアプリ URL</label>
+    <textarea id="gasUrl" rows="2" style="width:100%; font-size:11px; font-family:monospace;"></textarea>
+    <label class="small">Googleドライブ フォルダURL（またはフォルダID）</label>
+    <textarea id="folderInput" rows="2" style="width:100%; font-size:11px; font-family:monospace;"></textarea>
+    <div class="row" style="margin-top:8px;">
+      <button class="primary" id="btnSaveSettings">保存して読み込む</button>
+      <button id="btnCloseSettings">閉じる</button>
+    </div>
+    <p class="small">記録アプリで設定済みなら、そのまま読み込まれます（同じ端末・同じブラウザの場合）。</p>
+  </div>
+
+  <div id="msg"></div>
+
+  <div class="card">
+    <div class="row" style="justify-content:space-between;">
+      <div class="seg" id="modeSeg">
+        <button data-mode="project" class="on">📁 作品ごと</button>
+        <button data-mode="date">📅 日付ごと</button>
+        <button data-mode="scene">🎬 S#ごと</button>
+      </div>
+      <div class="row">
+        <button class="green" id="btnReload">↻ 読み込む</button>
+        <button id="btnCsv">CSV書き出し</button>
+      </div>
+    </div>
+    <div class="row" style="margin-top:10px;">
+      <select id="projectFilter"><option value="">すべての作品</option></select>
+      <input id="search" type="text" placeholder="検索（備考・ファイルNo・ロケ地・柱・カメラなど）" style="flex:1; min-width:180px;">
+      <span class="chip ok evchip on" data-ev="OK">OK</span>
+      <span class="chip keep evchip on" data-ev="KEEP">KEEP</span>
+      <span class="chip ng evchip on" data-ev="NG">NG</span>
+    </div>
+    <div class="row stat" style="margin-top:10px; gap:16px;">
+      <span>全 <b id="stTotal">0</b> テイク</span>
+      <span class="ev-OK">OK <b id="stOk">0</b></span>
+      <span class="ev-KEEP">KEEP <b id="stKeep">0</b></span>
+      <span class="ev-NG">NG <b id="stNg">0</b></span>
+      <span class="small" id="stProjects"></span>
+    </div>
+  </div>
+
+  <div id="content"><p class="small">「↻ 読み込む」でスプレッドシートから取り込みます。設定が未入力の場合は⚙️設定からどうぞ。<br>
+  <a href="#" id="demoLink">まずサンプルデータで表示を確認する</a></p></div>
+
+  <details class="card">
+    <summary style="cursor:pointer; font-weight:bold;">🔧 うまく読み込めないとき（GASの貼り替え）</summary>
+    <p class="small">管理ビューアで読み込むには、GAS側が「読み取り対応版（v2）」になっている必要があります。記録アプリの送信は今まで通り使えます。<br>
+    手順: <a href="https://script.google.com/" target="_blank" rel="noopener">Google Apps Script</a> で使っているプロジェクトを開く → コードを全部消して下のコードを貼る → 「デプロイ」＞「デプロイを管理」＞ 既存のウェブアプリを編集して新しいバージョンでデプロイ（URLは変わりません）。</p>
+    <textarea id="gasCode" class="gascode" rows="8" readonly></textarea>
+    <div class="row" style="margin-top:6px;"><button id="btnCopyGas">GASコードをコピー</button></div>
+  </details>
+</div>
+
+<script>
+const LS = { folder: "targetFolderIdShare", folderName: "targetFolderNameShare", gas: "gasUrlShare" };
+const DEFAULT_GAS = "";
+const GAS_CODE = "function doPost(e) {\n  try {\n    var data = JSON.parse(e.postData.contents);\n    if (data.action === \"update\") return updateRecord_(data);\n    var projectName = data.project || \"\u672a\u5b9a_\u9332\u97f3\u30b9\u30af\u30ea\u30d7\u30c8\";\n    var folderId = data.folderId;\n    var records = data.records;\n\n    if (!records || records.length === 0) return jsonOut_({\"status\": \"success\", \"message\": \"\u30c7\u30fc\u30bf\u306a\u3057\"});\n    if (!folderId) return jsonOut_({\"status\": \"error\", \"message\": \"\u30d5\u30a9\u30eb\u30c0ID\u672a\u8a2d\u5b9a\"});\n\n    var folder = DriveApp.getFolderById(folderId);\n    var files = folder.searchFiles(\"title = '\" + projectName + \"' and mimeType = 'application/vnd.google-apps.spreadsheet'\");\n    var ss = files.hasNext() ? SpreadsheetApp.open(files.next()) : (function(){ var newSs = SpreadsheetApp.create(projectName); DriveApp.getFileById(newSs.getId()).moveTo(folder); return newSs; })();\n\n    for (var i = 0; i < records.length; i++) {\n      var r = records[i];\n      var dateStr = r.date || \"\u672a\u8a2d\u5b9a\";\n      var sheet = ss.getSheetByName(dateStr);\n\n      if (!sheet) {\n        sheet = ss.insertSheet(dateStr);\n        sheet.appendRow([\"\u65e5\u4ed8\", \"\u30ed\u30fc\u30eb\", \"\u30b7\u30fc\u30f3\", \"\u30ab\u30c3\u30c8\", \"\u30c6\u30a4\u30af\", \"\u30d5\u30a1\u30a4\u30ebNo\", \"\u8a55\u4fa1\", \"\u5099\u8003\", \"Ch1\", \"Ch2\", \"Ch3\", \"Ch4\", \"Ch5\", \"Ch6\", \"Ch7\", \"Ch8\"]);\n        var defaultSheet = ss.getSheetByName(\"\u30b7\u30fc\u30c81\");\n        if (defaultSheet && ss.getSheets().length > 1) ss.deleteSheet(defaultSheet);\n      }\n\n      var lastRow = sheet.getLastRow();\n      var targetRow = -1;\n\n      if (lastRow > 1) {\n        var existingData = sheet.getRange(2, 1, lastRow - 1, 5).getValues();\n        for (var j = 0; j < existingData.length; j++) {\n          var row = existingData[j];\n          if (fmtDate_(row[0]) === String(r.date) && String(row[1]) === String(r.roll) && String(row[2]) === String(r.scene) && String(row[3]) === String(r.cut) && Number(row[4]) === Number(r.take)) {\n            targetRow = j + 2; break;\n          }\n        }\n      }\n\n      var rowData = [r.date, r.roll, r.scene, r.cut, r.take, r.fileNo, r.evaluation, r.memo, r.channels[0], r.channels[1], r.channels[2], r.channels[3], r.channels[4], r.channels[5], r.channels[6], r.channels[7]];\n\n      if (targetRow !== -1) {\n        sheet.getRange(targetRow, 1, 1, rowData.length).setValues([rowData]);\n      } else {\n        sheet.appendRow(rowData);\n        targetRow = sheet.getLastRow();\n      }\n      sheet.getRange(targetRow, 7).setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(['OK', 'KEEP', 'NG']).build());\n    }\n\n    return jsonOut_({\"status\": \"success\"});\n  } catch(error) {\n    return jsonOut_({\"status\": \"error\", \"message\": error.message});\n  }\n}\n\nfunction doGet(e) {\n  var p = (e && e.parameter) || {};\n  if (!p.mode) return jsonOut_({\"status\": \"active\", \"message\": \"GAS is running\", \"viewer\": \"v2\"});\n  try {\n    if (!p.folderId) return jsonOut_({\"status\": \"error\", \"message\": \"\u30d5\u30a9\u30eb\u30c0ID\u672a\u8a2d\u5b9a\"});\n    var folder = DriveApp.getFolderById(p.folderId);\n\n    if (p.mode === \"list\") {\n      return jsonOut_({\"status\": \"success\", \"projects\": listProjects_(folder)});\n    }\n    if (p.mode === \"data\") {\n      var ss = null;\n      if (p.spreadsheetId) {\n        ss = SpreadsheetApp.openById(p.spreadsheetId);\n      } else if (p.project) {\n        var files = folder.searchFiles(\"title = '\" + p.project + \"' and mimeType = 'application/vnd.google-apps.spreadsheet'\");\n        if (files.hasNext()) ss = SpreadsheetApp.open(files.next());\n      }\n      if (!ss) return jsonOut_({\"status\": \"error\", \"message\": \"\u4f5c\u54c1\u306e\u30b9\u30d7\u30ec\u30c3\u30c9\u30b7\u30fc\u30c8\u304c\u898b\u3064\u304b\u308a\u307e\u305b\u3093\"});\n      return jsonOut_({\"status\": \"success\", \"project\": ss.getName(), \"spreadsheetId\": ss.getId(), \"dates\": readSpreadsheet_(ss)});\n    }\n    if (p.mode === \"all\") {\n      var projects = [];\n      var it = folder.searchFiles(\"mimeType = 'application/vnd.google-apps.spreadsheet'\");\n      while (it.hasNext()) {\n        var f = it.next();\n        var book = SpreadsheetApp.open(f);\n        projects.push({\"project\": f.getName(), \"spreadsheetId\": f.getId(), \"dates\": readSpreadsheet_(book)});\n      }\n      return jsonOut_({\"status\": \"success\", \"projects\": projects});\n    }\n    return jsonOut_({\"status\": \"error\", \"message\": \"\u4e0d\u660e\u306amode\u3067\u3059: \" + p.mode});\n  } catch(error) {\n    return jsonOut_({\"status\": \"error\", \"message\": error.message});\n  }\n}\n\nfunction updateRecord_(data) {\n  if (!data.folderId) return jsonOut_({\"status\": \"error\", \"message\": \"\u30d5\u30a9\u30eb\u30c0ID\u672a\u8a2d\u5b9a\"});\n  var folder = DriveApp.getFolderById(data.folderId);\n  var files = folder.searchFiles(\"title = '\" + data.project + \"' and mimeType = 'application/vnd.google-apps.spreadsheet'\");\n  if (!files.hasNext()) return jsonOut_({\"status\": \"error\", \"message\": \"\u4f5c\u54c1\u304c\u898b\u3064\u304b\u308a\u307e\u305b\u3093\"});\n  var ss = SpreadsheetApp.open(files.next());\n  var sheet = ss.getSheetByName(String(data.date));\n  if (!sheet) return jsonOut_({\"status\": \"error\", \"message\": \"\u65e5\u4ed8\u30b7\u30fc\u30c8\u304c\u898b\u3064\u304b\u308a\u307e\u305b\u3093\"});\n  var lastRow = sheet.getLastRow();\n  if (lastRow < 2) return jsonOut_({\"status\": \"error\", \"message\": \"\u5bfe\u8c61\u884c\u304c\u898b\u3064\u304b\u308a\u307e\u305b\u3093\"});\n  var vals = sheet.getRange(2, 1, lastRow - 1, 5).getValues();\n  for (var j = 0; j < vals.length; j++) {\n    var row = vals[j];\n    if (fmtDate_(row[0]) === String(data.date) && String(row[1]) === String(data.roll) && String(row[2]) === String(data.scene) && String(row[3]) === String(data.cut) && Number(row[4]) === Number(data.take)) {\n      var target = j + 2;\n      if (data.evaluation) sheet.getRange(target, 7).setValue(data.evaluation);\n      if (typeof data.memo !== \"undefined\") sheet.getRange(target, 8).setValue(data.memo);\n      return jsonOut_({\"status\": \"success\"});\n    }\n  }\n  return jsonOut_({\"status\": \"error\", \"message\": \"\u5bfe\u8c61\u884c\u304c\u898b\u3064\u304b\u308a\u307e\u305b\u3093\"});\n}\n\nfunction listProjects_(folder) {\n  var out = [];\n  var it = folder.searchFiles(\"mimeType = 'application/vnd.google-apps.spreadsheet'\");\n  while (it.hasNext()) {\n    var f = it.next();\n    out.push({\"project\": f.getName(), \"spreadsheetId\": f.getId(), \"lastModified\": f.getLastUpdated().toISOString()});\n  }\n  return out;\n}\n\nfunction readSpreadsheet_(ss) {\n  var dates = [];\n  var sheets = ss.getSheets();\n  for (var s = 0; s < sheets.length; s++) {\n    var sheet = sheets[s];\n    var values = sheet.getDataRange().getValues();\n    var records = [];\n    for (var i = 1; i < values.length; i++) {\n      var v = values[i];\n      var blank = true;\n      for (var k = 0; k < v.length; k++) { if (String(v[k]) !== \"\") { blank = false; break; } }\n      if (blank) continue;\n      var channels = [];\n      for (var c = 0; c < 8; c++) channels.push(String(v[8 + c] || \"\"));\n      records.push({\n        \"date\": fmtDate_(v[0]) || sheet.getName(),\n        \"roll\": String(v[1] || \"\"),\n        \"scene\": String(v[2] || \"\"),\n        \"cut\": String(v[3] || \"\"),\n        \"take\": (v[4] === \"\" || v[4] === null) ? \"\" : (isNaN(Number(v[4])) ? String(v[4]) : Number(v[4])),\n        \"fileNo\": String(v[5] || \"\"),\n        \"evaluation\": String(v[6] || \"\"),\n        \"memo\": String(v[7] || \"\"),\n        \"channels\": channels\n      });\n    }\n    if (records.length > 0) dates.push({\"date\": sheet.getName(), \"records\": records});\n  }\n  return dates;\n}\n\nfunction fmtDate_(v) {\n  if (v instanceof Date) return Utilities.formatDate(v, Session.getScriptTimeZone(), \"yyyy-MM-dd\");\n  return String(v || \"\");\n}\n\nfunction jsonOut_(obj) {\n  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);\n}\n";
+
+let allRecords = [];   // flat records
+let mode = "project";
+let fromDemo = false;
+const evFilter = { OK:true, KEEP:true, NG:true };
+
+const $ = id => document.getElementById(id);
+$("gasCode").value = GAS_CODE;
+
+function folderIdFrom(input){
+  if(!input) return "";
+  const t = input.trim();
+  const m = t.match(/\/folders\/([a-zA-Z0-9_-]+)/) || t.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  return m ? m[1] : t;
+}
+function gasUrl(){ return (localStorage.getItem(LS.gas) || DEFAULT_GAS || "").trim(); }
+function folderId(){ return (localStorage.getItem(LS.folder) || "").trim(); }
+
+function initSettings(){
+  $("gasUrl").value = gasUrl();
+  $("folderInput").value = folderId();
+}
+$("btnSettings").onclick = () => { initSettings(); $("settings").style.display = $("settings").style.display === "none" ? "block" : "none"; };
+$("btnCloseSettings").onclick = () => $("settings").style.display = "none";
+$("btnSaveSettings").onclick = () => {
+  localStorage.setItem(LS.gas, $("gasUrl").value.trim());
+  localStorage.setItem(LS.folder, folderIdFrom($("folderInput").value));
+  $("settings").style.display = "none";
+  load();
+};
+$("btnCopyGas").onclick = () => navigator.clipboard.writeText(GAS_CODE).then(()=>alert("GASのコードをコピーしました")).catch(()=>alert("コピーに失敗しました"));
+$("btnReload").onclick = () => load();
+
+function showMsg(html, cls){ $("msg").innerHTML = html ? '<div class="' + cls + '">' + html + '</div>' : ""; }
+
+/* ---- memo parsing: recorder stored "[📍loc 柱:hashira 🎥cam ｸﾘｯﾌﾟ:clip] body" ---- */
+function parseMemo(raw){
+  const out = { prefix:"", body: raw || "", loc:"", hashira:"", camera:"", camClip:"" };
+  if(!raw) return out;
+  const m = raw.match(/^\[([\s\S]*?)\]\s*/);
+  if(!m) return out;
+  const inner = m[1];
+  const markers = [ ["loc","📍"], ["hashira","柱:"], ["camera","🎥"], ["camClip","ｸﾘｯﾌﾟ:"] ];
+  const hits = [];
+  markers.forEach(([key, mk]) => { const i = inner.indexOf(mk); if(i >= 0) hits.push({key, mk, i}); });
+  if(!hits.length) return out;
+  hits.sort((a,b)=>a.i-b.i);
+  hits.forEach((h, idx) => {
+    const start = h.i + h.mk.length;
+    const end = idx + 1 < hits.length ? hits[idx+1].i : inner.length;
+    out[h.key] = inner.slice(start, end).trim();
+  });
+  out.prefix = raw.slice(0, m[0].length);
+  out.body = raw.slice(m[0].length);
+  return out;
+}
+
+function flatten(projects){
+  const recs = [];
+  (projects || []).forEach(p => {
+    (p.dates || []).forEach(d => {
+      (d.records || []).forEach(r => {
+        const pm = parseMemo(r.memo || "");
+        recs.push({ project: p.project, spreadsheetId: p.spreadsheetId || "",
+          date: r.date || d.date || "", roll: r.roll || "", scene: String(r.scene ?? ""),
+          cut: r.cut || "", take: r.take, fileNo: r.fileNo || "", evaluation: r.evaluation || "",
+          memoRaw: r.memo || "", memoBody: pm.body, loc: pm.loc, hashira: pm.hashira,
+          camera: pm.camera, camClip: pm.camClip, prefix: pm.prefix,
+          channels: (r.channels || []).map(c => String(c || "")) });
+      });
+    });
+  });
+  return recs;
+}
+
+async function load(){
+  fromDemo = false;
+  const g = gasUrl(), f = folderId();
+  if(!g){ showMsg("GAS URLが未設定です。⚙️設定から入力してください。", "err"); $("settings").style.display="block"; initSettings(); return; }
+  if(!f){ showMsg("保存先フォルダが未設定です。⚙️設定から入力してください。", "err"); $("settings").style.display="block"; initSettings(); return; }
+  showMsg("読み込み中…", "oknote");
+  try {
+    const res = await fetch(g + (g.includes("?") ? "&" : "?") + "mode=all&folderId=" + encodeURIComponent(f));
+    const data = await res.json();
+    if(data.status === "active" || !data.projects){
+      showMsg("このGASはまだ読み取り対応版（v2）になっていません。下の「🔧 うまく読み込めないとき」にあるコードをGASへ貼り替えて、既存デプロイを新しいバージョンに更新してください。記録データ自体はスプレッドシートに残っています。", "err");
+      return;
+    }
+    if(data.status !== "success"){ showMsg("読み込みエラー: " + (data.message || data.status), "err"); return; }
+    allRecords = flatten(data.projects);
+    fillProjectFilter();
+    showMsg(allRecords.length + "件のテイクを読み込みました。", "oknote");
+    render();
+  } catch(e){
+    showMsg("読み込みに失敗しました。GASのURL・電波状況・デプロイのアクセス設定（全員）を確認してください。", "err");
+  }
+}
+
+/* ---- demo ---- */
+const DEMO = { status:"success", projects:[
+  { project:"サンプル映画", spreadsheetId:"demo", dates:[
+    { date:"2026-10-20", records:[
+      { date:"2026-10-20", roll:"R-01", scene:"1", cut:"A", take:1, fileNo:"T0001", evaluation:"NG", memo:"[📍河川敷 柱:河川敷（昼） 🎥Aカメ ｸﾘｯﾌﾟ:C001] 飛行機ノイズ", channels:["ガン","ピン1","","","","","",""] },
+      { date:"2026-10-20", roll:"R-01", scene:"1", cut:"A", take:2, fileNo:"T0002", evaluation:"OK", memo:"[📍河川敷 柱:河川敷（昼） 🎥Aカメ ｸﾘｯﾌﾟ:C002] ", channels:["ガン","ピン1","","","","","",""] },
+      { date:"2026-10-20", roll:"R-01", scene:"2", cut:"B", take:1, fileNo:"T0003", evaluation:"KEEP", memo:"[📍河川敷 柱:河川敷（昼） 🎥Bカメ ｸﾘｯﾌﾟ:C010] セリフかぶり気味", channels:["ガン","ピン1","ピン2","","","","",""] }
+    ]},
+    { date:"2026-10-21", records:[
+      { date:"2026-10-21", roll:"R-02", scene:"1", cut:"C", take:1, fileNo:"T0010", evaluation:"OK", memo:"[📍教室 柱:教室（夕） 🎥Aカメ ｸﾘｯﾌﾟ:C020] ", channels:["ガン","","ピン2","","","","",""] },
+      { date:"2026-10-21", roll:"R-02", scene:"12", cut:"A", take:1, fileNo:"T0011", evaluation:"OK", memo:"[📍教室 柱:教室（夕） 🎥Aカメ ｸﾘｯﾌﾟ:C021] ", channels:["ガン","","ピン2","","","","",""] }
+    ]}
+  ]},
+  { project:"短編B", spreadsheetId:"demo2", dates:[
+    { date:"2026-10-21", records:[
+      { date:"2026-10-21", roll:"R-01", scene:"1", cut:"A", take:1, fileNo:"S0001", evaluation:"KEEP", memo:"[📍公園 柱:公園（朝） 🎥Aカメ ｸﾘｯﾌﾟ:A001] 鳥の声入り", channels:["ガン","ピン1","","","","","",""] }
+    ]}
+  ]}
+]};
+$("demoLink").onclick = (e) => { e.preventDefault(); fromDemo = true; allRecords = flatten(DEMO.projects); fillProjectFilter(); showMsg("サンプル表示中です（実際のデータではありません）。", "oknote"); render(); };
+
+/* ---- filtering & grouping ---- */
+function naturalKey(s){ return String(s).split(/(\d+)/).map(p => /^\d+$/.test(p) ? p.padStart(8,"0") : p); }
+function cmpNatural(a,b){ const x=naturalKey(a), y=naturalKey(b); for(let i=0;i<Math.max(x.length,y.length);i++){ const d=String(x[i]??"").localeCompare(String(y[i]??"")); if(d) return d; } return 0; }
+
+function filtered(){
+  const pf = $("projectFilter").value;
+  const q = $("search").value.trim().toLowerCase();
+  return allRecords.filter(r => {
+    if(pf && r.project !== pf) return false;
+    if(r.evaluation && !evFilter[r.evaluation]) return false;
+    if(q){
+      const hay = [r.project, r.date, r.roll, r.scene, r.cut, r.fileNo, r.memoBody, r.loc, r.hashira, r.camera, r.camClip, r.channels.join(" ")].join(" ").toLowerCase();
+      if(!hay.includes(q)) return false;
+    }
+    return true;
+  });
+}
+function fillProjectFilter(){
+  const cur = $("projectFilter").value;
+  const names = [...new Set(allRecords.map(r => r.project))].sort();
+  $("projectFilter").innerHTML = '<option value="">すべての作品</option>' + names.map(n => '<option value="' + esc(n) + '">' + esc(n) + '</option>').join("");
+  $("projectFilter").value = names.includes(cur) ? cur : "";
+}
+function esc(s){ return String(s ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c])); }
+
+function groupBy(arr, keyFn){
+  const map = new Map();
+  arr.forEach(r => { const k = keyFn(r); if(!map.has(k)) map.set(k, []); map.get(k).push(r); });
+  return map;
+}
+
+function takeTable(recs){
+  const sorted = [...recs].sort((a,b) => cmpNatural(a.roll, b.roll) || cmpNatural(a.cut, b.cut) || (Number(a.take)||0) - (Number(b.take)||0));
+  let h = '<div class="tblwrap"><table><tr><th>ロール</th><th>カット</th><th>Tk</th><th>ファイルNo</th><th>評価</th><th>備考</th><th>Ch</th></tr>';
+  sorted.forEach(r => {
+    const idx = allRecords.indexOf(r);
+    const tags = [];
+    if(r.loc) tags.push("📍" + esc(r.loc));
+    if(r.hashira) tags.push("柱:" + esc(r.hashira));
+    if(r.camera) tags.push("🎥" + esc(r.camera));
+    if(r.camClip) tags.push("ｸﾘｯﾌﾟ:" + esc(r.camClip));
+    const chs = r.channels.map((c,i) => c ? "Ch" + (i+1) + ":" + esc(c) : "").filter(Boolean).join(" / ");
+    h += '<tr><td>' + esc(r.roll) + '</td><td>' + esc(r.cut || "-") + '</td><td>' + esc(r.take) + '</td><td>' + esc(r.fileNo) + '</td>' +
+      '<td><select class="evsel ev-' + esc(r.evaluation) + '" data-idx="' + idx + '">' +
+      ["OK","KEEP","NG"].map(ev => '<option value="' + ev + '"' + (r.evaluation === ev ? " selected" : "") + '>' + ev + '</option>').join("") + '</select></td>' +
+      '<td class="memo">' + (tags.length ? '<span class="small">' + tags.join(" ") + '</span><br>' : "") + esc(r.memoBody) +
+      ' <button class="editbtn" data-edit="' + idx + '" title="備考を編集">✏️</button></td>' +
+      '<td class="small">' + chs + '</td></tr>';
+  });
+  return h + '</table></div>';
+}
+
+function render(){
+  const recs = filtered();
+  $("stTotal").textContent = recs.length;
+  $("stOk").textContent = recs.filter(r => r.evaluation === "OK").length;
+  $("stKeep").textContent = recs.filter(r => r.evaluation === "KEEP").length;
+  $("stNg").textContent = recs.filter(r => r.evaluation === "NG").length;
+  $("stProjects").textContent = "作品数: " + new Set(recs.map(r => r.project)).size + " / 日数: " + new Set(recs.map(r => r.date)).size + " / シーン数: " + new Set(recs.map(r => r.project + "|" + r.scene)).size;
+  if(!recs.length){ $("content").innerHTML = '<p class="small">表示するテイクがありません。</p>'; return; }
+
+  // leaf = (project, date, scene)
+  const leaves = groupBy(recs, r => r.project + "\u0001" + r.date + "\u0001" + r.scene);
+  let order;
+  if(mode === "project") order = [ r => r.project, r => r.date, r => "S#" + r.scene ];
+  else if(mode === "date") order = [ r => r.date, r => r.project, r => "S#" + r.scene ];
+  else order = [ r => "S#" + r.scene, r => r.project, r => r.date ];
+
+  const l1 = groupBy(recs, order[0]);
+  const keys1 = [...l1.keys()].sort(mode === "date" ? (a,b)=>String(b).localeCompare(String(a)) : cmpNatural);
+  let h = "";
+  keys1.forEach(k1 => {
+    const g1 = l1.get(k1);
+    h += '<details class="group" open><summary>' + esc(k1) + '<span class="cnt">' + g1.length + 'テイク</span></summary>';
+    const l2 = groupBy(g1, order[1]);
+    const keys2 = [...l2.keys()].sort(mode === "project" ? (a,b)=>String(a).localeCompare(String(b)) : cmpNatural);
+    keys2.forEach(k2 => {
+      const g2 = l2.get(k2);
+      h += '<details class="group lv2" open><summary>' + esc(k2) + '<span class="cnt">' + g2.length + 'テイク</span></summary>';
+      const l3 = groupBy(g2, order[2]);
+      const keys3 = [...l3.keys()].sort(cmpNatural);
+      keys3.forEach(k3 => {
+        const g3 = l3.get(k3);
+        h += '<details class="group lv3" open><summary>' + esc(k3) + '<span class="cnt">' + g3.length + 'テイク</span></summary>' + takeTable(g3) + '</details>';
+      });
+      h += '</details>';
+    });
+    h += '</details>';
+  });
+  $("content").innerHTML = h;
+
+  document.querySelectorAll(".evsel").forEach(sel => sel.onchange = () => updateRecord(Number(sel.dataset.idx), { evaluation: sel.value }));
+  document.querySelectorAll("[data-edit]").forEach(btn => btn.onclick = () => {
+    const r = allRecords[Number(btn.dataset.edit)];
+    const v = prompt("備考を編集（タグ部分は自動で維持されます）", r.memoBody);
+    if(v === null) return;
+    updateRecord(Number(btn.dataset.edit), { memoBody: v });
+  });
+}
+
+async function updateRecord(idx, patch){
+  const r = allRecords[idx];
+  if(patch.evaluation) r.evaluation = patch.evaluation;
+  if(typeof patch.memoBody !== "undefined"){ r.memoBody = patch.memoBody; r.memoRaw = r.prefix + patch.memoBody; }
+  render();
+  if(fromDemo) return;
+  try {
+    const payload = { action:"update", project:r.project, folderId: folderId(), date:r.date, roll:r.roll, scene:r.scene, cut:r.cut, take:r.take };
+    if(patch.evaluation) payload.evaluation = patch.evaluation;
+    if(typeof patch.memoBody !== "undefined") payload.memo = r.memoRaw;
+    const res = await fetch(gasUrl(), { method:"POST", headers:{ "Content-Type":"text/plain" }, body: JSON.stringify(payload) });
+    const data = await res.json();
+    if(data.status !== "success") alert("シートへの反映に失敗しました: " + (data.message || data.status) + "\n（GASが v2 になっていない可能性があります）");
+  } catch(e){ alert("シートへの反映に失敗しました（通信エラー）"); }
+}
+
+/* ---- events ---- */
+$("modeSeg").querySelectorAll("button").forEach(b => b.onclick = () => {
+  mode = b.dataset.mode;
+  $("modeSeg").querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b));
+  render();
+});
+$("projectFilter").onchange = render;
+$("search").oninput = render;
+document.querySelectorAll(".evchip").forEach(c => c.onclick = () => { evFilter[c.dataset.ev] = !evFilter[c.dataset.ev]; c.classList.toggle("on", evFilter[c.dataset.ev]); render(); });
+
+$("btnCsv").onclick = () => {
+  const recs = filtered();
+  if(!recs.length){ alert("書き出すデータがありません"); return; }
+  const head = ["作品","日付","ロール","シーン","カット","テイク","ファイルNo","評価","ロケ地","柱","カメラ","クリップ","備考","Ch1","Ch2","Ch3","Ch4","Ch5","Ch6","Ch7","Ch8"];
+  const lines = [head.join(",")].concat(recs.map(r => [r.project, r.date, r.roll, r.scene, r.cut, r.take, r.fileNo, r.evaluation, r.loc, r.hashira, r.camera, r.camClip, r.memoBody, ...r.channels]
+    .map(v => '"' + String(v ?? "").replace(/"/g, '""') + '"').join(",")));
+  const blob = new Blob(["\uFEFF" + lines.join("\r\n")], { type:"text/csv" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "sound_script_" + new Date().toISOString().slice(0,10) + ".csv";
+  a.click();
+  URL.revokeObjectURL(a.href);
+};
+
+/* ---- init ---- */
+initSettings();
+if(gasUrl() && folderId()) load();
+</script>
+</body>
+</html>
