@@ -104,6 +104,19 @@
   <a href="#" id="demoLink">まずサンプルデータで表示を確認する</a></p></div>
 
   <details class="card">
+    <summary style="cursor:pointer; font-weight:bold;">📖 使い方・プライバシーポリシー</summary>
+    <p class="small"><b>使い方</b><br>
+    1. ⚙️設定に、自分の Google アカウントで用意した GAS Webアプリ URL と Googleドライブのフォルダを設定します（記録アプリと共通の設定です）。<br>
+    2. 「↻ 読み込む」でスプレッドシートから記録を取り込みます。<br>
+    3. 作品・日付・S# の切り替え、検索、OK/KEEP/NG フィルタで絞り込みます。<br>
+    4. 評価と備考はその場で編集でき、シートへ自動で反映されます。「CSV書き出し」でCSVファイルも作れます。</p>
+    <p class="small"><b>プライバシーポリシー</b><br>
+    ・記録データは、設定された GAS（Google Apps Script）Webアプリ経由で、あなた自身の Googleドライブ内のスプレッドシート（作品名＝スプレッドシート／日付＝シート）とだけやり取りされます。通信先は Google のサービスのみで、作者や第三者のサーバーへデータが送られることはありません。<br>
+    ・設定（GAS URL・フォルダID）は、このブラウザの localStorage に保存されます。<br>
+    ・このページには、アクセス解析や広告などの外部読み込みはありません。</p>
+  </details>
+
+  <details class="card">
     <summary style="cursor:pointer; font-weight:bold;">🔧 うまく読み込めないとき（GASの貼り替え）</summary>
     <p class="small">管理ビューアで読み込むには、GAS側が「読み取り対応版（v2）」になっている必要があります。記録アプリの送信は今まで通り使えます。<br>
     手順: <a href="https://script.google.com/" target="_blank" rel="noopener">Google Apps Script</a> で使っているプロジェクトを開く → コードを全部消して下のコードを貼る → 「デプロイ」＞「デプロイを管理」＞ 既存のウェブアプリを編集して新しいバージョンでデプロイ（URLは変わりません）。</p>
