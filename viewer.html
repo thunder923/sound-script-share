@@ -6,42 +6,67 @@
 <meta name="robots" content="noindex">
 <title>録音スクリプト 管理ビューア (共有版)</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎙️</text></svg>">
+<script>
+  // テーマ (theme-mode): 既定は自動（OS連動）。画面上の選択で ライト/ダーク に固定でき、選択は localStorage に保存される
+  (function () {
+    var KEY = "theme-mode";
+    function mode() { try { return localStorage.getItem(KEY) || "auto"; } catch (e) { return "auto"; } }
+    function apply() {
+      var m = mode();
+      var dark = m === "dark" || (m !== "light" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+      document.documentElement.dataset.theme = dark ? "dark" : "light";
+      var sel = document.getElementById("themeModeSel");
+      if (sel) sel.value = m;
+    }
+    apply();
+    document.addEventListener("DOMContentLoaded", apply);
+    window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", apply);
+    document.addEventListener("change", function (e) {
+      if (e.target && e.target.id === "themeModeSel") {
+        try { localStorage.setItem(KEY, e.target.value); } catch (err) {}
+        apply();
+      }
+    });
+  })();
+</script>
 <style>
+  :root { --bg:#f4f5f7; --panel:#ffffff; --panel2:#eceff3; --text:#1f2430; --subtext:#5f6b7a; --border:#d4d9e0; --input-bg:#ffffff; --accent:#2563eb; --link:#1d6fd1; --group-bg:#ffffff; --chip-bg:#e5e7eb; --chip-ok-bg:#c8e6c9; --chip-ok-text:#1b5e20; --chip-keep-bg:#ffecb3; --chip-keep-text:#6d4c00; --chip-ng-bg:#ffcdd2; --chip-ng-text:#7f1d1d; --ok-text:#2e7d32; --keep-text:#9a6b00; --ng-text:#c62828; --err-bg:#fdecec; --err-text:#7f1d1d; --oknote-bg:#e6f4ea; --oknote-text:#1b5e20; }
+  :root[data-theme="dark"] { --bg:#121417; --panel:#1b1e24; --panel2:#23262d; --text:#e8eaed; --subtext:#9aa0a6; --border:#33373e; --input-bg:#22252b; --accent:#2563eb; --link:#7db8f0; --group-bg:#17191d; --chip-bg:#33373e; --chip-ok-bg:#1b5e20; --chip-ok-text:#c8e6c9; --chip-keep-bg:#6d4c00; --chip-keep-text:#ffe082; --chip-ng-bg:#7f1d1d; --chip-ng-text:#fecaca; --ok-text:#81c784; --keep-text:#ffd54f; --ng-text:#e57373; --err-bg:#3b1111; --err-text:#fecaca; --oknote-bg:#12351a; --oknote-text:#c8e6c9; }
   * { box-sizing: border-box; }
-  body { background:#121212; color:#e0e0e0; font-family:sans-serif; margin:0; }
+  body { background:var(--bg); color:var(--text); font-family:sans-serif; margin:0; }
   .wrap { max-width:1100px; margin:0 auto; padding:16px 16px 60px; }
   h1 { font-size:18px; margin:0; }
-  a { color:#7db8f0; }
-  input, select, textarea { background:#2d2d2d; color:#fff; border:1px solid #444; padding:8px; border-radius:4px; }
+  a { color:var(--link); }
+  input, select, textarea { background:var(--input-bg); color:var(--text); border:1px solid var(--border); padding:8px; border-radius:4px; }
   input:focus, textarea:focus { outline:none; border-color:#4CAF50; }
   button { cursor:pointer; border:none; border-radius:6px; font-weight:bold; padding:8px 12px; background:#374151; color:#e5e7eb; }
   button.primary { background:#2196F3; color:#fff; }
   button.green { background:#2e7d32; color:#fff; }
-  .card { background:#1e1e1e; border:1px solid #333; border-radius:8px; padding:12px; margin-bottom:12px; }
+  .card { background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:12px; margin-bottom:12px; }
   .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
   .seg { display:flex; gap:4px; }
-  .seg button { background:#262626; color:#9ca3af; border:1px solid #3f3f46; }
+  .seg button { background:var(--panel2); color:var(--subtext); border:1px solid var(--border); }
   .seg button.on { background:#2563eb; color:#fff; border-color:#2563eb; }
-  .chip { display:inline-block; font-size:11px; padding:1px 6px; border-radius:999px; background:#333; color:#cbd5e1; margin-right:4px; }
-  .chip.ok { background:#1b5e20; color:#c8e6c9; } .chip.keep { background:#6d4c00; color:#ffe082; } .chip.ng { background:#7f1d1d; color:#fecaca; }
+  .chip { display:inline-block; font-size:11px; padding:1px 6px; border-radius:999px; background:var(--chip-bg); color:var(--text); margin-right:4px; }
+  .chip.ok { background:var(--chip-ok-bg); color:var(--chip-ok-text); } .chip.keep { background:var(--chip-keep-bg); color:var(--chip-keep-text); } .chip.ng { background:var(--chip-ng-bg); color:var(--chip-ng-text); }
   .evchip { cursor:pointer; user-select:none; opacity:.35; }
   .evchip.on { opacity:1; }
-  details.group { background:#1a1a1a; border:1px solid #2c2c2c; border-left:4px solid #2563eb; border-radius:6px; margin-bottom:8px; }
-  details.group.lv2 { border-left-color:#555; margin:8px 0 8px 10px; }
+  details.group { background:var(--group-bg); border:1px solid var(--border); border-left:4px solid #2563eb; border-radius:6px; margin-bottom:8px; }
+  details.group.lv2 { border-left-color:var(--subtext); margin:8px 0 8px 10px; }
   details.group.lv3 { border-left-color:#2e7d32; margin:8px 0 8px 10px; }
   details.group > summary { cursor:pointer; padding:10px 12px; font-weight:bold; font-size:14px; list-style:none; }
   details.group > summary::-webkit-details-marker { display:none; }
-  details.group > summary .cnt { color:#9ca3af; font-weight:normal; font-size:12px; margin-left:6px; }
+  details.group > summary .cnt { color:var(--subtext); font-weight:normal; font-size:12px; margin-left:6px; }
   .tblwrap { overflow-x:auto; padding:0 10px 10px; }
   table { border-collapse:collapse; width:100%; font-size:12px; min-width:640px; }
-  th, td { border-bottom:1px solid #2c2c2c; padding:6px 6px; text-align:left; vertical-align:top; }
-  th { color:#9ca3af; font-weight:bold; white-space:nowrap; }
+  th, td { border-bottom:1px solid var(--border); padding:6px 6px; text-align:left; vertical-align:top; }
+  th { color:var(--subtext); font-weight:bold; white-space:nowrap; }
   td.memo { min-width:180px; white-space:pre-wrap; word-break:break-word; }
   .evsel { padding:4px; font-size:12px; font-weight:bold; }
-  .ev-OK { color:#81c784; } .ev-KEEP { color:#ffd54f; } .ev-NG { color:#e57373; }
-  .small { font-size:12px; color:#9ca3af; }
-  .err { background:#3b1111; border:1px solid #7f1d1d; color:#fecaca; border-radius:6px; padding:10px 12px; margin-bottom:12px; font-size:13px; }
-  .oknote { background:#12351a; border:1px solid #2e7d32; color:#c8e6c9; border-radius:6px; padding:10px 12px; margin-bottom:12px; font-size:13px; }
+  .ev-OK { color:var(--ok-text); } .ev-KEEP { color:var(--keep-text); } .ev-NG { color:var(--ng-text); }
+  .small { font-size:12px; color:var(--subtext); }
+  .err { background:var(--err-bg); border:1px solid var(--ng-text); color:var(--err-text); border-radius:6px; padding:10px 12px; margin-bottom:12px; font-size:13px; }
+  .oknote { background:var(--oknote-bg); border:1px solid #2e7d32; color:var(--oknote-text); border-radius:6px; padding:10px 12px; margin-bottom:12px; font-size:13px; }
   .editbtn { background:none; padding:2px 4px; font-size:12px; }
   textarea.gascode { width:100%; font-family:monospace; font-size:10px; }
   .stat b { font-size:16px; }
@@ -49,10 +74,11 @@
 </head>
 <body>
 <div class="wrap">
-  <div class="row" style="justify-content:space-between; border-bottom:1px solid #333; padding-bottom:10px; margin-bottom:12px;">
+  <div class="row" style="justify-content:space-between; border-bottom:1px solid var(--border); padding-bottom:10px; margin-bottom:12px;">
     <h1>🎙️ 録音スクリプト 管理（共有版）</h1>
     <div class="row">
       <a href="index.html" style="font-size:12px;">📝 記録アプリへ</a>
+      <select id="themeModeSel" aria-label="テーマ"><option value="auto">自動（OS連動）</option><option value="light">ライト</option><option value="dark">ダーク</option></select>
       <button id="btnSettings">⚙️ 設定</button>
     </div>
   </div>
@@ -106,7 +132,7 @@
   <details class="card">
     <summary style="cursor:pointer; font-weight:bold;">📖 使い方・プライバシーポリシー</summary>
     <p class="small"><b>使い方</b><br>
-    1. ⚙️設定に、自分の Google アカウントで用意した GAS Webアプリ URL と Googleドライブのフォルダを設定します（記録アプリと共通の設定です）。<br>
+    1. ⚙️設定に GAS Webアプリ URL と Googleドライブのフォルダが入っているか確認します（記録アプリと共通の設定です）。<br>
     2. 「↻ 読み込む」でスプレッドシートから記録を取り込みます。<br>
     3. 作品・日付・S# の切り替え、検索、OK/KEEP/NG フィルタで絞り込みます。<br>
     4. 評価と備考はその場で編集でき、シートへ自動で反映されます。「CSV書き出し」でCSVファイルも作れます。</p>
